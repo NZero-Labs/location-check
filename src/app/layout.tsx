@@ -3,8 +3,16 @@ import './globals.css'
 import { Providers } from './providers'
 
 export const metadata: Metadata = {
-  title: 'Malhas IBGE',
-  description: 'Visualize malhas geográficas e verifique coordenadas nos municípios brasileiros',
+  title: 'Malhas IBGE | Amara NetZero',
+  description:
+    'Aplicação da Amara NetZero para visualização de malhas geográficas e verificação de coordenadas nos municípios brasileiros.',
+  applicationName: 'Malhas IBGE',
+  authors: [{ name: 'Amara NetZero' }],
+  keywords: ['IBGE', 'malhas geográficas', 'municípios', 'coordenadas', 'Amara NetZero'],
+  icons: {
+    icon: '/favicon.ico',
+    shortcut: '/favicon.ico',
+  },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

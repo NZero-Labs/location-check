@@ -1,10 +1,9 @@
 'use client'
 import { useCallback, useRef, useState } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { Loader2, MapPin, Search } from 'lucide-react'
+import { Loader2, Search } from 'lucide-react'
 import { searchByCep, searchByAddress, type GeoResult } from '@/lib/geocoding'
 
 type GeoMode = 'cep' | 'address'
@@ -57,14 +56,7 @@ export function GeoSearch({ onResult }: GeoSearchProps) {
   }
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-sm flex items-center gap-2">
-          <MapPin className="h-3.5 w-3.5" />
-          Busca de endereço
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3">
+    <div className="flex flex-col gap-3">
         <div className="flex rounded-md border border-border overflow-hidden text-xs font-medium">
           {(['cep', 'address'] as GeoMode[]).map((m) => (
             <button
@@ -131,7 +123,6 @@ export function GeoSearch({ onResult }: GeoSearchProps) {
             ))}
           </div>
         )}
-      </CardContent>
-    </Card>
+    </div>
   )
 }
