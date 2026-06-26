@@ -213,14 +213,6 @@ function PageInner() {
     setCheckResult(null)
   }, [])
 
-  // Used internally for reverse geocoding auto-select
-  const handleMunicipioSelect = useCallback((mun: MunicipioWithEstado) => {
-    setSelectedEstado(null)
-    setSelectedMunicipio(mun)
-    setDetectedMunicipio(null)
-    setCheckResult(null)
-  }, [])
-
   const handleUseDetected = useCallback(() => {
     if (!detectedMunicipio) return
     setSelectedEstado(null)
@@ -272,22 +264,19 @@ function PageInner() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lat, lng, validCoord])
 
-  // ── Handle reverse geocode results ───────────────────────────────────────────
+  // ── Handle reverse geocode results — never change the user's selection ────────
   useEffect(() => {
     if (!revGeoQuery || !revGeoResults.length) return
     const match = revGeoResults.find((m) => m.estadoSigla === revGeoQuery.sigla)
     if (!match) return
     setRevGeoQuery(null)
-    if (!selectedMunicipio) {
-      // Nothing selected yet → auto-select
-      handleMunicipioSelect(match)
-    } else if (match.id !== selectedMunicipio.id) {
-      // Coordinate is in a different city → show as secondary layer
+    // Only show as secondary layer; never overwrite what the user selected
+    if (match.id !== selectedMunicipio?.id) {
       setDetectedMunicipio(match)
     } else {
       setDetectedMunicipio(null)
     }
-  }, [revGeoResults, revGeoQuery, handleMunicipioSelect, selectedMunicipio])
+  }, [revGeoResults, revGeoQuery, selectedMunicipio])
 
   const { resolvedTheme } = useTheme()
 

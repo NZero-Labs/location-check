@@ -13,33 +13,35 @@ L.Icon.Default.mergeOptions({
 })
 
 function FitAll({
-  geojson,
+  geojsons,
   marker,
 }: {
-  geojson: GeoJSON.FeatureCollection | null
+  geojsons: (GeoJSON.FeatureCollection | null | undefined)[]
   marker: [number, number] | null
 }) {
   const map = useMap()
   useEffect(() => {
     try {
-      if (geojson && marker) {
-        const layer = L.geoJSON(geojson)
-        const bounds = layer.getBounds()
-        if (bounds.isValid()) {
-          bounds.extend(marker)
-          map.fitBounds(bounds, { padding: [40, 40] })
-        } else {
-          map.setView(marker, 13)
-        }
-      } else if (geojson) {
-        const layer = L.geoJSON(geojson)
-        const bounds = layer.getBounds()
-        if (bounds.isValid()) map.fitBounds(bounds, { padding: [20, 20] })
-      } else if (marker) {
-        map.setView(marker, 13)
+      const active = geojsons.filter(Boolean) as GeoJSON.FeatureCollection[]
+      let bounds: L.LatLngBounds | null = null
+
+      for (const g of active) {
+        const layer = L.geoJSON(g)
+        const b = layer.getBounds()
+        if (!b.isValid()) continue
+        bounds = bounds ? bounds.extend(b) : b
+      }
+
+      if (marker) {
+        bounds = bounds ? bounds.extend(marker) : L.latLngBounds([marker, marker])
+      }
+
+      if (bounds && bounds.isValid()) {
+        map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 })
       }
     } catch {}
-  }, [geojson, marker, map])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [...geojsons, marker, map])
   return null
 }
 
@@ -78,8 +80,6 @@ export default function LeafletMap({
   marker, theme,
 }: LeafletMapProps) {
   const tile = theme === 'dark' ? TILE_LAYERS.dark : TILE_LAYERS.light
-  // Fit to detected when no selection, otherwise prefer selected
-  const primaryGeojson = municipioGeojson ?? detectedMunicipioGeojson ?? null
 
   return (
     <MapContainer
@@ -104,7 +104,7 @@ export default function LeafletMap({
         <GeoJSON key={`municipio-${municipioId}`} data={municipioGeojson} style={municipioStyle} />
       )}
 
-      <FitAll geojson={primaryGeojson} marker={marker} />
+      <FitAll geojsons={[municipioGeojson, detectedMunicipioGeojson]} marker={marker} />
       {marker && <Marker position={marker} />}
     </MapContainer>
   )
