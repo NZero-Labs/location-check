@@ -1,4 +1,5 @@
 import dynamic from 'next/dynamic'
+import type { LeafletMapProps } from './LeafletMap'
 
 // Leaflet requires `window` — must never run on the server
 const LeafletMap = dynamic(() => import('./LeafletMap'), {
@@ -11,3 +12,4 @@ const LeafletMap = dynamic(() => import('./LeafletMap'), {
 })
 
 export { LeafletMap as MapView }
+export type { LeafletMapProps }

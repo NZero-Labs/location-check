@@ -50,18 +50,31 @@ const municipioStyle: L.PathOptions = {
   color: '#10b981', weight: 2, fillColor: '#6ee7b7', fillOpacity: 0.3,
 }
 
-interface LeafletMapProps {
+const TILE_LAYERS = {
+  dark: {
+    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
+  },
+  light: {
+    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+  },
+}
+
+export interface LeafletMapProps {
   estadoGeojson: GeoJSON.FeatureCollection | null
   municipioGeojson: GeoJSON.FeatureCollection | null
   estadoId?: number
   municipioId?: number
   marker: [number, number] | null
+  theme?: string
 }
 
 export default function LeafletMap({
-  estadoGeojson, municipioGeojson, estadoId, municipioId, marker,
+  estadoGeojson, municipioGeojson, estadoId, municipioId, marker, theme,
 }: LeafletMapProps) {
   const activeGeojson = municipioGeojson ?? estadoGeojson
+  const tile = theme === 'dark' ? TILE_LAYERS.dark : TILE_LAYERS.light
 
   return (
     <MapContainer
@@ -70,8 +83,9 @@ export default function LeafletMap({
       style={{ height: '100%', width: '100%', position: 'absolute', inset: 0 }}
     >
       <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        key={theme}
+        attribution={tile.attribution}
+        url={tile.url}
       />
 
       {estadoGeojson && !municipioGeojson && (

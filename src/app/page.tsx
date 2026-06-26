@@ -16,7 +16,7 @@ import { ComboBox } from '@/components/ComboBox'
 import {
   Sidebar, SidebarContent, SidebarFooter,
   SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
-  SidebarHeader, SidebarProvider, SidebarTrigger,
+  SidebarHeader, SidebarProvider,
 } from '@/components/ui/sidebar'
 import { Card, CardContent } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
@@ -238,10 +238,12 @@ function PageInner() {
     setCheckResult({ inside, label })
   }, [lat, lng, validCoord, municipioGeojson, estadoGeojson, loadingMalha, selectedMunicipio, selectedEstado])
 
+  const { resolvedTheme } = useTheme()
+
   // ── Render ────────────────────────────────────────────────────────────────────
   return (
-    <SidebarProvider className="h-dvh overflow-hidden">
-        <Sidebar collapsible="offcanvas">
+    <SidebarProvider defaultOpen className="h-dvh overflow-hidden">
+        <Sidebar variant="inset" collapsible="none">
           <SidebarHeader className="border-b border-sidebar-border px-4 py-3">
             <div className="flex items-center justify-between">
               <div className="flex flex-col min-w-0">
@@ -377,13 +379,13 @@ function PageInner() {
 
         {/* Map */}
         <main className="flex-1 relative min-w-0 h-dvh">
-          <SidebarTrigger className="absolute top-3 left-3 z-1200" />
           <MapView
             estadoGeojson={estadoGeojson as GeoJSON.FeatureCollection | null}
             municipioGeojson={municipioGeojson}
             estadoId={selectedEstado?.id}
             municipioId={selectedMunicipio?.id}
             marker={markerPos}
+            theme={resolvedTheme}
           />
         </main>
     </SidebarProvider>
