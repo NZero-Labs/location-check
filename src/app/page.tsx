@@ -8,7 +8,7 @@ import type { Feature, Polygon, MultiPolygon } from 'geojson'
 import { trpc } from '@/lib/trpc'
 import type { MunicipioWithEstado } from '@/types'
 import type { GeoResult } from '@/lib/geocoding'
-import { parseGoogleMapsUrl, reverseGeocode } from '@/lib/geocoding'
+import { reverseGeocode } from '@/lib/geocoding'
 
 import { MapView } from '@/components/MapView'
 import { GeoSearch } from '@/components/GeoSearch'
@@ -119,6 +119,7 @@ function PageInner() {
   const [markerPos, setMarkerPos] = useState<[number, number] | null>(null)
   const [checkResult, setCheckResult] = useState<CheckResult>(null)
   const [restored, setRestored] = useState(false)
+  const [detectedMunicipio, setDetectedMunicipio] = useState<MunicipioWithEstado | null>(null)
   const [isLocating, setIsLocating] = useState(false)
   const [revGeoQuery, setRevGeoQuery] = useState<{ name: string; sigla: string } | null>(null)
   const reverseGeocodeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -143,6 +144,12 @@ function PageInner() {
   const { data: revGeoResults = [] } = trpc.ibge.searchMunicipios.useQuery(
     { query: revGeoQuery?.name ?? '', limit: 20 },
     { enabled: !!revGeoQuery }
+  )
+
+  // Malha for detected municipio (only when different from selected)
+  const { data: detectedMalha = null } = trpc.ibge.malhaMunicipio.useQuery(
+    { municipioId: detectedMunicipio?.id ?? 0, estadoId: detectedMunicipio?.estadoId ?? 0 },
+    { enabled: !!detectedMunicipio && detectedMunicipio.id !== selectedMunicipio?.id }
   )
 
   // ── Restore from URL ──────────────────────────────────────────────────────────
@@ -181,23 +188,22 @@ function PageInner() {
   // ── Handlers ──────────────────────────────────────────────────────────────────
   const handleMunicipioSelect = useCallback((mun: MunicipioWithEstado) => {
     setSelectedMunicipio(mun)
+    setDetectedMunicipio(null)
     setCheckResult(null)
   }, [])
+
+  const handleUseDetected = useCallback(() => {
+    if (!detectedMunicipio) return
+    setSelectedMunicipio(detectedMunicipio)
+    setDetectedMunicipio(null)
+    setCheckResult(null)
+  }, [detectedMunicipio])
 
   const handleGeoResult = useCallback((r: GeoResult) => {
     setLatInput(String(r.lat))
     setLngInput(String(r.lng))
   }, [])
 
-  const handleCoordPaste = useCallback((e: React.ClipboardEvent<HTMLInputElement>) => {
-    const text = e.clipboardData.getData('text')
-    const gmaps = parseGoogleMapsUrl(text)
-    if (gmaps) {
-      e.preventDefault()
-      setLatInput(String(gmaps.lat))
-      setLngInput(String(gmaps.lng))
-    }
-  }, [])
 
   // ── Reactive coord → marker + check ──────────────────────────────────────────
   const lat = useMemo(() => { const v = parseFloat(latInput); return isNaN(v) ? null : v }, [latInput])
@@ -217,10 +223,14 @@ function PageInner() {
 
   // ── Auto-detect municipio from coordinates ────────────────────────────────────
   useEffect(() => {
-    if (!validCoord || lat === null || lng === null) return
+    if (!validCoord || lat === null || lng === null) {
+      setDetectedMunicipio(null)
+      return
+    }
     if (reverseGeocodeTimer.current) clearTimeout(reverseGeocodeTimer.current)
     reverseGeocodeTimer.current = setTimeout(async () => {
       setIsLocating(true)
+      setDetectedMunicipio(null)
       try {
         const result = await reverseGeocode(lat, lng)
         if (result) setRevGeoQuery({ name: result.cityName, sigla: result.stateSigla })
@@ -232,15 +242,22 @@ function PageInner() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lat, lng, validCoord])
 
-  // ── Select municipio once reverse geocode results arrive ──────────────────────
+  // ── Handle reverse geocode results ───────────────────────────────────────────
   useEffect(() => {
     if (!revGeoQuery || !revGeoResults.length) return
     const match = revGeoResults.find((m) => m.estadoSigla === revGeoQuery.sigla)
-    if (match) {
-      setRevGeoQuery(null)
+    if (!match) return
+    setRevGeoQuery(null)
+    if (!selectedMunicipio) {
+      // Nothing selected yet → auto-select
       handleMunicipioSelect(match)
+    } else if (match.id !== selectedMunicipio.id) {
+      // Coordinate is in a different city → show as secondary layer
+      setDetectedMunicipio(match)
+    } else {
+      setDetectedMunicipio(null)
     }
-  }, [revGeoResults, revGeoQuery, handleMunicipioSelect])
+  }, [revGeoResults, revGeoQuery, handleMunicipioSelect, selectedMunicipio])
 
   const { resolvedTheme } = useTheme()
 
@@ -299,7 +316,6 @@ function PageInner() {
                       placeholder="-23.5505"
                       value={latInput}
                       onChange={(e) => setLatInput(e.target.value)}
-                      onPaste={handleCoordPaste}
                     />
                   </div>
                   <div className="flex flex-col gap-1.5 flex-1">
@@ -309,7 +325,6 @@ function PageInner() {
                       placeholder="-46.6333"
                       value={lngInput}
                       onChange={(e) => setLngInput(e.target.value)}
-                      onPaste={handleCoordPaste}
                     />
                   </div>
                 </div>
@@ -347,6 +362,24 @@ function PageInner() {
                   </div>
                 )}
 
+                {/* Detected municipio differs from selected */}
+                {detectedMunicipio && selectedMunicipio && detectedMunicipio.id !== selectedMunicipio.id && (
+                  <div className="flex flex-col gap-2 rounded-md border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-950/40 p-3">
+                    <p className="text-xs text-indigo-600 dark:text-indigo-400 font-medium">Ponto localizado em:</p>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <Badge variant="outline" className="text-xs shrink-0 border-indigo-300 dark:border-indigo-700">
+                          {detectedMunicipio.estadoSigla}
+                        </Badge>
+                        <span className="text-sm font-medium truncate">{detectedMunicipio.nome}</span>
+                      </div>
+                      <Button size="sm" variant="outline" className="shrink-0 text-xs h-7" onClick={handleUseDetected}>
+                        Usar
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
                 {/* Share */}
                 {(selectedMunicipio || validCoord) && (
                   <ShareButton />
@@ -368,6 +401,8 @@ function PageInner() {
             estadoGeojson={null}
             municipioGeojson={municipioGeojson}
             municipioId={selectedMunicipio?.id}
+            detectedMunicipioGeojson={detectedMalha ?? null}
+            detectedMunicipioId={detectedMunicipio?.id}
             marker={markerPos}
             theme={resolvedTheme}
           />

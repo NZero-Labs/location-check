@@ -46,6 +46,9 @@ function FitAll({
 const municipioStyle: L.PathOptions = {
   color: '#10b981', weight: 2, fillColor: '#6ee7b7', fillOpacity: 0.3,
 }
+const detectedStyle: L.PathOptions = {
+  color: '#6366f1', weight: 2, fillColor: '#a5b4fc', fillOpacity: 0.25, dashArray: '6 4',
+}
 
 const TILE_LAYERS = {
   dark: {
@@ -63,14 +66,20 @@ export interface LeafletMapProps {
   municipioGeojson: GeoJSON.FeatureCollection | null
   estadoId?: number
   municipioId?: number
+  detectedMunicipioGeojson?: GeoJSON.FeatureCollection | null
+  detectedMunicipioId?: number
   marker: [number, number] | null
   theme?: string
 }
 
 export default function LeafletMap({
-  municipioGeojson, municipioId, marker, theme,
+  municipioGeojson, municipioId,
+  detectedMunicipioGeojson, detectedMunicipioId,
+  marker, theme,
 }: LeafletMapProps) {
   const tile = theme === 'dark' ? TILE_LAYERS.dark : TILE_LAYERS.light
+  // Fit to detected when no selection, otherwise prefer selected
+  const primaryGeojson = municipioGeojson ?? detectedMunicipioGeojson ?? null
 
   return (
     <MapContainer
@@ -84,11 +93,18 @@ export default function LeafletMap({
         url={tile.url}
       />
 
+      {detectedMunicipioGeojson && (
+        <GeoJSON
+          key={`detected-${detectedMunicipioId}`}
+          data={detectedMunicipioGeojson}
+          style={detectedStyle}
+        />
+      )}
       {municipioGeojson && (
         <GeoJSON key={`municipio-${municipioId}`} data={municipioGeojson} style={municipioStyle} />
       )}
 
-      <FitAll geojson={municipioGeojson} marker={marker} />
+      <FitAll geojson={primaryGeojson} marker={marker} />
       {marker && <Marker position={marker} />}
     </MapContainer>
   )
