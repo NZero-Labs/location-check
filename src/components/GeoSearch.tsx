@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { Loader2, Search } from 'lucide-react'
-import { searchByCep, searchByAddress, type GeoResult } from '@/lib/geocoding'
+import { searchByCep, searchByAddress, parseGoogleMapsUrl, type GeoResult } from '@/lib/geocoding'
 
 type GeoMode = 'cep' | 'address'
 
@@ -43,13 +43,31 @@ export function GeoSearch({ onResult }: GeoSearchProps) {
     }
   }, [onResult])
 
+  const tryGoogleMaps = useCallback((val: string): boolean => {
+    const gmaps = parseGoogleMapsUrl(val)
+    if (gmaps) {
+      onResult(gmaps)
+      setQuery('')
+      setResults([])
+      setError(null)
+      return true
+    }
+    return false
+  }, [onResult])
+
   const handleAddressChange = useCallback((val: string) => {
     setQuery(val)
     setResults([])
     setError(null)
+    if (tryGoogleMaps(val)) return
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => handleSearch(val, 'address'), 600)
-  }, [handleSearch])
+  }, [handleSearch, tryGoogleMaps])
+
+  const handleCepChange = useCallback((val: string) => {
+    setQuery(val)
+    if (tryGoogleMaps(val)) return
+  }, [tryGoogleMaps])
 
   const switchMode = (m: GeoMode) => {
     setMode(m); setQuery(''); setResults([]); setError(null)
@@ -77,9 +95,9 @@ export function GeoSearch({ onResult }: GeoSearchProps) {
         {mode === 'cep' ? (
           <div className="flex gap-2">
             <Input
-              placeholder="00000-000"
+              placeholder="00000-000 ou link do Google Maps"
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => handleCepChange(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSearch(query, 'cep')}
               maxLength={9}
               className="flex-1"
@@ -97,7 +115,7 @@ export function GeoSearch({ onResult }: GeoSearchProps) {
         ) : (
           <div className="relative">
             <Input
-              placeholder="Ex: Av. Paulista, São Paulo"
+              placeholder="Endereço ou link do Google Maps"
               value={query}
               onChange={(e) => handleAddressChange(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSearch(query, 'address')}

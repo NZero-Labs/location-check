@@ -1,5 +1,5 @@
 'use client'
-import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import * as turf from '@turf/turf'
@@ -8,6 +8,7 @@ import type { Feature, Polygon, MultiPolygon } from 'geojson'
 import { trpc } from '@/lib/trpc'
 import type { Estado, Municipio } from '@/types'
 import type { GeoResult } from '@/lib/geocoding'
+import { parseGoogleMapsUrl, reverseGeocode } from '@/lib/geocoding'
 
 import { MapView } from '@/components/MapView'
 import { GeoSearch } from '@/components/GeoSearch'
@@ -134,6 +135,9 @@ function PageInner() {
   const [markerPos, setMarkerPos] = useState<[number, number] | null>(null)
   const [checkResult, setCheckResult] = useState<CheckResult>(null)
   const [restored, setRestored] = useState(false)
+  const [pendingMunicipioName, setPendingMunicipioName] = useState<string | null>(null)
+  const [isLocating, setIsLocating] = useState(false)
+  const reverseGeocodeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── tRPC queries ─────────────────────────────────────────────────────────────
   const { data: estados = [], isLoading: loadingEstados } = trpc.ibge.estados.useQuery()
@@ -221,6 +225,21 @@ function PageInner() {
     setLngInput(String(r.lng))
   }, [])
 
+  const handleMunicipioClickOnMap = useCallback((municipioId: number) => {
+    const mun = municipios.find((m) => m.id === municipioId)
+    if (mun) handleMunicipioSelect(mun)
+  }, [municipios, handleMunicipioSelect])
+
+  const handleCoordPaste = useCallback((e: React.ClipboardEvent<HTMLInputElement>) => {
+    const text = e.clipboardData.getData('text')
+    const gmaps = parseGoogleMapsUrl(text)
+    if (gmaps) {
+      e.preventDefault()
+      setLatInput(String(gmaps.lat))
+      setLngInput(String(gmaps.lng))
+    }
+  }, [])
+
   // ── Reactive coord → marker + check ──────────────────────────────────────────
   const lat = useMemo(() => { const v = parseFloat(latInput); return isNaN(v) ? null : v }, [latInput])
   const lng = useMemo(() => { const v = parseFloat(lngInput); return isNaN(v) ? null : v }, [lngInput])
@@ -237,6 +256,39 @@ function PageInner() {
     const label = selectedMunicipio?.nome ?? selectedEstado?.nome ?? ''
     setCheckResult({ inside, label })
   }, [lat, lng, validCoord, municipioGeojson, estadoGeojson, loadingMalha, selectedMunicipio, selectedEstado])
+
+  // ── Auto-detect estado + municipio from coordinates ───────────────────────────
+  useEffect(() => {
+    if (!validCoord || lat === null || lng === null || !estados.length) return
+    if (reverseGeocodeTimer.current) clearTimeout(reverseGeocodeTimer.current)
+    reverseGeocodeTimer.current = setTimeout(async () => {
+      setIsLocating(true)
+      try {
+        const result = await reverseGeocode(lat, lng)
+        if (!result) return
+        const estado = estados.find((e) => e.sigla === result.stateSigla)
+        if (!estado) return
+        setPendingMunicipioName(result.cityName)
+        if (selectedEstado?.sigla !== estado.sigla) handleEstadoSelect(estado)
+      } finally {
+        setIsLocating(false)
+      }
+    }, 900)
+    return () => { if (reverseGeocodeTimer.current) clearTimeout(reverseGeocodeTimer.current) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lat, lng, validCoord, estados])
+
+  // ── Select municipio once the list loads after a reverse geocode ──────────────
+  useEffect(() => {
+    if (!pendingMunicipioName || !municipios.length) return
+    const normalize = (s: string) =>
+      s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
+    const mun = municipios.find((m) => normalize(m.nome) === normalize(pendingMunicipioName))
+    if (mun) {
+      setPendingMunicipioName(null)
+      handleMunicipioSelect(mun)
+    }
+  }, [municipios, pendingMunicipioName, handleMunicipioSelect])
 
   const { resolvedTheme } = useTheme()
 
@@ -321,6 +373,7 @@ function PageInner() {
                       placeholder="-23.5505"
                       value={latInput}
                       onChange={(e) => setLatInput(e.target.value)}
+                      onPaste={handleCoordPaste}
                     />
                   </div>
                   <div className="flex flex-col gap-1.5 flex-1">
@@ -330,16 +383,22 @@ function PageInner() {
                       placeholder="-46.6333"
                       value={lngInput}
                       onChange={(e) => setLngInput(e.target.value)}
+                      onPaste={handleCoordPaste}
                     />
                   </div>
                 </div>
 
-                {validCoord && !checkResult && !loadingMalha && !selectedEstado && (
+                {isLocating && (
+                  <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                    <Loader2 className="h-3 w-3 animate-spin" /> Identificando localização...
+                  </p>
+                )}
+                {validCoord && !checkResult && !loadingMalha && !selectedEstado && !isLocating && (
                   <p className="text-xs text-muted-foreground">
                     Ponto plotado. Selecione um estado para verificar.
                   </p>
                 )}
-                {validCoord && loadingMalha && (
+                {validCoord && loadingMalha && !isLocating && (
                   <p className="text-xs text-muted-foreground flex items-center gap-1.5">
                     <Loader2 className="h-3 w-3 animate-spin" /> Verificando...
                   </p>
@@ -386,6 +445,7 @@ function PageInner() {
             municipioId={selectedMunicipio?.id}
             marker={markerPos}
             theme={resolvedTheme}
+            onMunicipioClick={handleMunicipioClickOnMap}
           />
         </SidebarInset>
     </SidebarProvider>

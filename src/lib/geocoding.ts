@@ -66,6 +66,65 @@ export async function searchByCep(cep: string): Promise<GeoResult> {
   return parseNominatimResults(fallbackData)[0]
 }
 
+export interface ReverseGeoResult {
+  stateSigla: string
+  cityName: string
+}
+
+export async function reverseGeocode(lat: number, lng: number): Promise<ReverseGeoResult | null> {
+  const url = new URL(`${NOMINATIM}/reverse`)
+  url.searchParams.set('lat', String(lat))
+  url.searchParams.set('lon', String(lng))
+  url.searchParams.set('format', 'json')
+  url.searchParams.set('addressdetails', '1')
+
+  const res = await fetch(url.toString(), { headers: nominatimHeaders() })
+  if (!res.ok) return null
+
+  const data = await res.json()
+  const address = data.address
+  if (!address) return null
+
+  // ISO3166-2-lvl4 is "BR-SP", extract the sigla
+  const iso = address['ISO3166-2-lvl4'] as string | undefined
+  const stateSigla = iso?.split('-')[1]
+  const cityName: string | undefined =
+    address.city ?? address.town ?? address.municipality ?? address.village ?? address.county
+
+  if (!stateSigla || !cityName) return null
+  return { stateSigla, cityName }
+}
+
+export function parseGoogleMapsUrl(input: string): GeoResult | null {
+  // @lat,lng pattern (most Google Maps share URLs)
+  const atMatch = input.match(/@(-?\d+\.?\d*),(-?\d+\.?\d*)/)
+  if (atMatch) {
+    const lat = parseFloat(atMatch[1])
+    const lng = parseFloat(atMatch[2])
+    if (!isNaN(lat) && !isNaN(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
+      return { lat, lng, displayName: `${lat}, ${lng}` }
+    }
+  }
+  // q=lat,lng pattern
+  try {
+    const url = new URL(input)
+    if (url.hostname.includes('google') || url.hostname.includes('goo.gl')) {
+      const q = url.searchParams.get('q')
+      if (q) {
+        const parts = q.split(',')
+        if (parts.length >= 2) {
+          const lat = parseFloat(parts[0].trim())
+          const lng = parseFloat(parts[1].trim())
+          if (!isNaN(lat) && !isNaN(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
+            return { lat, lng, displayName: `${lat}, ${lng}` }
+          }
+        }
+      }
+    }
+  } catch {}
+  return null
+}
+
 export async function searchByAddress(query: string): Promise<GeoResult[]> {
   if (!query.trim()) return []
   const url = new URL(`${NOMINATIM}/search`)

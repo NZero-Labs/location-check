@@ -46,6 +46,9 @@ function FitAll({
 const estadoStyle: L.PathOptions = {
   color: '#3b82f6', weight: 1, fillColor: '#93c5fd', fillOpacity: 0.2,
 }
+const estadoHoverStyle: L.PathOptions = {
+  fillOpacity: 0.45, weight: 2,
+}
 const municipioStyle: L.PathOptions = {
   color: '#10b981', weight: 2, fillColor: '#6ee7b7', fillOpacity: 0.3,
 }
@@ -68,10 +71,33 @@ export interface LeafletMapProps {
   municipioId?: number
   marker: [number, number] | null
   theme?: string
+  onMunicipioClick?: (municipioId: number) => void
+}
+
+function onEachMunicipio(
+  feature: GeoJSON.Feature,
+  layer: L.Layer,
+  onClick?: (id: number) => void,
+) {
+  if (!onClick) return
+  const path = layer as L.Path
+  path.on({
+    mouseover() {
+      path.setStyle(estadoHoverStyle)
+      path.getElement()?.style.setProperty('cursor', 'pointer')
+    },
+    mouseout() {
+      path.setStyle({ fillOpacity: estadoStyle.fillOpacity, weight: estadoStyle.weight })
+    },
+    click() {
+      const codarea = feature.properties?.codarea
+      if (codarea) onClick(parseInt(codarea, 10))
+    },
+  })
 }
 
 export default function LeafletMap({
-  estadoGeojson, municipioGeojson, estadoId, municipioId, marker, theme,
+  estadoGeojson, municipioGeojson, estadoId, municipioId, marker, theme, onMunicipioClick,
 }: LeafletMapProps) {
   const activeGeojson = municipioGeojson ?? estadoGeojson
   const tile = theme === 'dark' ? TILE_LAYERS.dark : TILE_LAYERS.light
@@ -89,7 +115,12 @@ export default function LeafletMap({
       />
 
       {estadoGeojson && !municipioGeojson && (
-        <GeoJSON key={`estado-${estadoId}`} data={estadoGeojson} style={estadoStyle} />
+        <GeoJSON
+          key={`estado-${estadoId}`}
+          data={estadoGeojson}
+          style={estadoStyle}
+          onEachFeature={(f, l) => onEachMunicipio(f, l, onMunicipioClick)}
+        />
       )}
       {municipioGeojson && (
         <GeoJSON key={`municipio-${municipioId}`} data={municipioGeojson} style={municipioStyle} />
