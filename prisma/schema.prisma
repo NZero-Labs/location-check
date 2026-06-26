@@ -1,0 +1,40 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Estado {
+  id          Int          @id
+  sigla       String       @db.Char(2)
+  nome        String
+  regiaoId    Int?         @map("regiao_id")
+  regiaoSigla String?      @map("regiao_sigla") @db.Char(2)
+  regiaoNome  String?      @map("regiao_nome")
+  updatedAt   DateTime     @default(now()) @map("updated_at")
+  municipios  Municipio[]
+  malha       MalhaEstado?
+
+  @@map("estados")
+}
+
+model Municipio {
+  id        Int      @id
+  nome      String
+  estadoId  Int      @map("estado_id")
+  updatedAt DateTime @default(now()) @map("updated_at")
+  estado    Estado   @relation(fields: [estadoId], references: [id])
+
+  @@map("municipios")
+}
+
+model MalhaEstado {
+  estadoId  Int      @id @map("estado_id")
+  geojson   Json
+  updatedAt DateTime @default(now()) @map("updated_at")
+  estado    Estado   @relation(fields: [estadoId], references: [id])
+
+  @@map("malhas_estado")
+}
