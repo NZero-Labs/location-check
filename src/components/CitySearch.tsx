@@ -9,7 +9,7 @@ import {
   CommandInput, CommandItem, CommandList, CommandSeparator,
 } from '@/components/ui/command'
 import { Badge } from '@/components/ui/badge'
-import { Check, ChevronsUpDown, Loader2, Map } from 'lucide-react'
+import { Check, ChevronsUpDown, Loader2, Map as MapIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface CitySearchProps {
@@ -64,14 +64,12 @@ export function CitySearch({ value, onSelect }: CitySearchProps) {
   const isFetching = fetchingEstados || fetchingMunicipios
 
   // Group municipios by state
-  const grouped = municipioResults.reduce<Map<string, { estadoNome: string; items: MunicipioWithEstado[] }>>(
-    (acc, m) => {
-      if (!acc.has(m.estadoSigla)) acc.set(m.estadoSigla, { estadoNome: m.estadoNome, items: [] })
-      acc.get(m.estadoSigla)!.items.push(m)
-      return acc
-    },
-    new Map()
-  )
+  type GroupMap = Map<string, { estadoNome: string; items: MunicipioWithEstado[] }>
+  const grouped: GroupMap = new Map()
+  for (const m of municipioResults) {
+    if (!grouped.has(m.estadoSigla)) grouped.set(m.estadoSigla, { estadoNome: m.estadoNome, items: [] })
+    grouped.get(m.estadoSigla)!.items.push(m)
+  }
 
   const hasResults = estadoResults.length > 0 || municipioResults.length > 0
 
@@ -134,7 +132,7 @@ export function CitySearch({ value, onSelect }: CitySearchProps) {
                         className="gap-2"
                       >
                         <Check className={cn('h-4 w-4 shrink-0', selectedKey === key ? 'opacity-100' : 'opacity-0')} />
-                        <Map className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        <MapIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
                         <span className="flex-1 truncate">{e.nome}</span>
                         <Badge variant="secondary" className="shrink-0 text-xs">{e.sigla}</Badge>
                       </CommandItem>

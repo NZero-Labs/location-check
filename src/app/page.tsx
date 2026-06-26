@@ -201,7 +201,21 @@ function PageInner() {
   }, [selectedEstado, selectedMunicipio, latInput, lngInput, router])
 
   // ── Handlers ──────────────────────────────────────────────────────────────────
+  const handleCitySearchSelect = useCallback((v: CitySearchValue) => {
+    if (v.kind === 'estado') {
+      setSelectedEstado(v.data)
+      setSelectedMunicipio(null)
+    } else {
+      setSelectedEstado(null)
+      setSelectedMunicipio(v.data)
+    }
+    setDetectedMunicipio(null)
+    setCheckResult(null)
+  }, [])
+
+  // Used internally for reverse geocoding auto-select
   const handleMunicipioSelect = useCallback((mun: MunicipioWithEstado) => {
+    setSelectedEstado(null)
     setSelectedMunicipio(mun)
     setDetectedMunicipio(null)
     setCheckResult(null)
@@ -209,6 +223,7 @@ function PageInner() {
 
   const handleUseDetected = useCallback(() => {
     if (!detectedMunicipio) return
+    setSelectedEstado(null)
     setSelectedMunicipio(detectedMunicipio)
     setDetectedMunicipio(null)
     setCheckResult(null)
@@ -232,9 +247,9 @@ function PageInner() {
     setMarkerPos([lat, lng])
     if (!municipioGeojson || loadingMalha) { setCheckResult(null); return }
     const inside = pointInGeojson(municipioGeojson, lat, lng)
-    const label = selectedMunicipio?.nome ?? ''
+    const label = selectedMunicipio?.nome ?? selectedEstado?.nome ?? ''
     setCheckResult({ inside, label })
-  }, [lat, lng, validCoord, municipioGeojson, loadingMalha, selectedMunicipio])
+  }, [lat, lng, validCoord, municipioGeojson, loadingMalha, selectedMunicipio, selectedEstado])
 
   // ── Auto-detect municipio from coordinates ────────────────────────────────────
   useEffect(() => {
@@ -296,8 +311,17 @@ function PageInner() {
               <SidebarGroupLabel>Localização</SidebarGroupLabel>
               <SidebarGroupContent className="flex flex-col gap-2 px-2">
                 <div className="flex flex-col gap-1.5">
-                  <Label className="text-xs">Município</Label>
-                  <CitySearch value={selectedMunicipio} onSelect={handleMunicipioSelect} />
+                  <Label className="text-xs">Estado ou município</Label>
+                  <CitySearch
+                    value={
+                      selectedMunicipio
+                        ? { kind: 'municipio', data: selectedMunicipio }
+                        : selectedEstado
+                          ? { kind: 'estado', data: selectedEstado }
+                          : null
+                    }
+                    onSelect={handleCitySearchSelect}
+                  />
                 </div>
                 {loadingMalha && (
                   <p className="text-xs text-muted-foreground flex items-center gap-1.5">
@@ -349,9 +373,9 @@ function PageInner() {
                     <Loader2 className="h-3 w-3 animate-spin" /> Identificando localização...
                   </p>
                 )}
-                {validCoord && !checkResult && !loadingMalha && !selectedMunicipio && !isLocating && (
+                {validCoord && !checkResult && !loadingMalha && !selectedMunicipio && !selectedEstado && !isLocating && (
                   <p className="text-xs text-muted-foreground">
-                    Ponto plotado. Selecione um município para verificar.
+                    Ponto plotado. Selecione um estado ou município para verificar.
                   </p>
                 )}
                 {validCoord && loadingMalha && !isLocating && (
@@ -396,7 +420,7 @@ function PageInner() {
                 )}
 
                 {/* Share */}
-                {(selectedMunicipio || validCoord) && (
+                {(selectedMunicipio || selectedEstado || validCoord) && (
                   <ShareButton />
                 )}
               </SidebarGroupContent>
@@ -431,6 +455,15 @@ function PageInner() {
                   <span className="font-medium truncate max-w-40">
                     {selectedMunicipio.nome}
                     <span className="text-muted-foreground font-normal"> ({selectedMunicipio.estadoSigla})</span>
+                  </span>
+                </div>
+              )}
+              {municipioGeojson && selectedEstado && !selectedMunicipio && (
+                <div className="flex items-center gap-2">
+                  <span className="h-3 w-5 shrink-0 rounded-sm border-2 border-emerald-500 bg-emerald-200/60" />
+                  <span className="font-medium truncate max-w-40">
+                    {selectedEstado.nome}
+                    <span className="text-muted-foreground font-normal"> ({selectedEstado.sigla})</span>
                   </span>
                 </div>
               )}
