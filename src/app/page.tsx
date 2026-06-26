@@ -24,7 +24,10 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
-import { Loader2, Moon, Sun, Share2, Check } from 'lucide-react'
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { Loader2, Monitor, Moon, Sun, Share2, Check } from 'lucide-react'
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -53,19 +56,38 @@ type CheckResult = { inside: boolean; label: string } | null
 
 // ── Theme toggle ───────────────────────────────────────────────────────────────
 
+const THEMES = [
+  { value: 'light',  label: 'Claro',   icon: Sun },
+  { value: 'dark',   label: 'Escuro',  icon: Moon },
+  { value: 'system', label: 'Sistema', icon: Monitor },
+] as const
+
 function ThemeToggle() {
-  const { resolvedTheme, setTheme } = useTheme()
+  const { theme, setTheme, resolvedTheme } = useTheme()
+  const active = THEMES.find((t) => t.value === theme) ?? THEMES[2]
+  const Icon = resolvedTheme === 'dark' ? Moon : Sun
+
   return (
-    <Button
-      variant="ghost"
-      size="icon"
-      onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
-      className="h-8 w-8"
-    >
-      <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-      <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-      <span className="sr-only">Alternar tema</span>
-    </Button>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+          <Icon className="h-4 w-4" />
+          <span className="sr-only">Tema: {active.label}</span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {THEMES.map(({ value, label, icon: TIcon }) => (
+          <DropdownMenuItem
+            key={value}
+            onClick={() => setTheme(value)}
+            className={theme === value ? 'bg-accent' : ''}
+          >
+            <TIcon className="mr-2 h-4 w-4" />
+            {label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 
@@ -218,9 +240,8 @@ function PageInner() {
 
   // ── Render ────────────────────────────────────────────────────────────────────
   return (
-    <SidebarProvider>
-      <div className="flex h-screen w-full overflow-hidden bg-background">
-        <Sidebar variant="inset" collapsible="icon">
+    <SidebarProvider className="h-dvh overflow-hidden">
+        <Sidebar collapsible="offcanvas">
           <SidebarHeader className="border-b border-sidebar-border px-4 py-3">
             <div className="flex items-center justify-between">
               <div className="flex flex-col min-w-0">
@@ -231,7 +252,7 @@ function PageInner() {
             </div>
           </SidebarHeader>
 
-          <SidebarContent className="gap-0">
+          <SidebarContent className="gap-0 overflow-y-auto">
             {/* Localização */}
             <SidebarGroup>
               <SidebarGroupLabel>Localização</SidebarGroupLabel>
@@ -355,8 +376,8 @@ function PageInner() {
         </Sidebar>
 
         {/* Map */}
-        <main className="flex-1 relative">
-          <SidebarTrigger className="absolute top-3 left-3 z-1000" />
+        <main className="flex-1 relative min-w-0 h-dvh">
+          <SidebarTrigger className="absolute top-3 left-3 z-1200" />
           <MapView
             estadoGeojson={estadoGeojson as GeoJSON.FeatureCollection | null}
             municipioGeojson={municipioGeojson}
@@ -365,7 +386,6 @@ function PageInner() {
             marker={markerPos}
           />
         </main>
-      </div>
     </SidebarProvider>
   )
 }

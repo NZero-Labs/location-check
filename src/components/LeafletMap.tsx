@@ -67,7 +67,7 @@ export default function LeafletMap({
     <MapContainer
       center={[-15.77972, -47.92972]}
       zoom={4}
-      className="h-full w-full"
+      style={{ height: '100%', width: '100%', position: 'absolute', inset: 0 }}
     >
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
