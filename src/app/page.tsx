@@ -6,20 +6,19 @@ import * as turf from '@turf/turf'
 import type { Feature, Polygon, MultiPolygon } from 'geojson'
 
 import { trpc } from '@/lib/trpc'
-import type { Estado, Municipio } from '@/types'
+import type { MunicipioWithEstado } from '@/types'
 import type { GeoResult } from '@/lib/geocoding'
 import { parseGoogleMapsUrl, reverseGeocode } from '@/lib/geocoding'
 
 import { MapView } from '@/components/MapView'
 import { GeoSearch } from '@/components/GeoSearch'
-import { ComboBox } from '@/components/ComboBox'
+import { CitySearch } from '@/components/CitySearch'
 
 import {
   Sidebar, SidebarContent, SidebarFooter,
   SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
   SidebarHeader, SidebarInset, SidebarProvider,
 } from '@/components/ui/sidebar'
-import { Card, CardContent } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -39,18 +38,6 @@ function pointInGeojson(geojson: GeoJSON.FeatureCollection, lat: number, lng: nu
       if (turf.booleanPointInPolygon(pt, f as Feature<Polygon | MultiPolygon>)) return true
   }
   return false
-}
-
-function extractMunicipioMalha(
-  estadoGeojson: GeoJSON.FeatureCollection,
-  municipioId: number
-): GeoJSON.FeatureCollection {
-  return {
-    type: 'FeatureCollection',
-    features: estadoGeojson.features.filter(
-      (f) => f.properties?.codarea === String(municipioId)
-    ),
-  }
 }
 
 type CheckResult = { inside: boolean; label: string } | null
@@ -125,110 +112,82 @@ function PageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  const [selectedEstado, setSelectedEstado] = useState<Estado | null>(null)
-  const [selectedMunicipio, setSelectedMunicipio] = useState<Municipio | null>(null)
-  const [estadoOpen, setEstadoOpen] = useState(false)
-  const [municipioOpen, setMunicipioOpen] = useState(false)
+  const [selectedMunicipio, setSelectedMunicipio] = useState<MunicipioWithEstado | null>(null)
   const [municipioGeojson, setMunicipioGeojson] = useState<GeoJSON.FeatureCollection | null>(null)
   const [latInput, setLatInput] = useState(searchParams.get('lat') ?? '')
   const [lngInput, setLngInput] = useState(searchParams.get('lng') ?? '')
   const [markerPos, setMarkerPos] = useState<[number, number] | null>(null)
   const [checkResult, setCheckResult] = useState<CheckResult>(null)
   const [restored, setRestored] = useState(false)
-  const [pendingMunicipioName, setPendingMunicipioName] = useState<string | null>(null)
   const [isLocating, setIsLocating] = useState(false)
+  const [revGeoQuery, setRevGeoQuery] = useState<{ name: string; sigla: string } | null>(null)
   const reverseGeocodeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── tRPC queries ─────────────────────────────────────────────────────────────
-  const { data: estados = [], isLoading: loadingEstados } = trpc.ibge.estados.useQuery()
 
-  const { data: municipios = [], isLoading: loadingMunicipios } =
-    trpc.ibge.municipios.useQuery(
-      { estadoId: selectedEstado?.id ?? 0 },
-      { enabled: !!selectedEstado }
+  // Restore from URL: fetch municipio by ID
+  const munIdFromUrl = restored ? null : Number(searchParams.get('municipioId')) || null
+  const { data: restoredMun } = trpc.ibge.getMunicipio.useQuery(
+    { id: munIdFromUrl ?? 0 },
+    { enabled: !!munIdFromUrl && !restored }
+  )
+
+  // Malha for selected municipio (server extracts only the one feature)
+  const { data: municipioMalha = null, isLoading: loadingMalha } =
+    trpc.ibge.malhaMunicipio.useQuery(
+      { municipioId: selectedMunicipio?.id ?? 0, estadoId: selectedMunicipio?.estadoId ?? 0 },
+      { enabled: !!selectedMunicipio }
     )
 
-  const { data: estadoGeojson = null, isLoading: loadingMalha } =
-    trpc.ibge.malhaEstado.useQuery(
-      { estadoId: selectedEstado?.id ?? 0 },
-      { enabled: !!selectedEstado }
-    )
+  // Reverse geocode city search
+  const { data: revGeoResults = [] } = trpc.ibge.searchMunicipios.useQuery(
+    { query: revGeoQuery?.name ?? '', limit: 20 },
+    { enabled: !!revGeoQuery }
+  )
 
-  // ── Restore state from URL params ─────────────────────────────────────────────
+  // ── Restore from URL ──────────────────────────────────────────────────────────
   useEffect(() => {
-    if (restored || !estados.length) return
-    const estadoId = searchParams.get('estadoId')
-    const estadoSigla = searchParams.get('estado')
-    if (!estadoId && !estadoSigla) { setRestored(true); return }
+    if (restored || !restoredMun) return
+    setSelectedMunicipio(restoredMun)
+    setRestored(true)
+  }, [restoredMun, restored])
 
-    const estado = estados.find(
-      (e) => e.id === Number(estadoId) || e.sigla === estadoSigla
-    )
-    if (estado) {
-      setSelectedEstado(estado)
-      setRestored(true)
-    }
-  }, [estados, searchParams, restored])
-
-  // Restore municipio after municipios load
   useEffect(() => {
-    if (!restored || !municipios.length) return
-    const munId = searchParams.get('municipioId')
-    if (!munId) return
-    const mun = municipios.find((m) => m.id === Number(munId))
-    if (mun && estadoGeojson) {
-      setSelectedMunicipio(mun)
-      const filtered = extractMunicipioMalha(estadoGeojson as GeoJSON.FeatureCollection, mun.id)
-      setMunicipioGeojson(filtered.features.length ? filtered : null)
-    }
-  }, [municipios, estadoGeojson, searchParams, restored])
+    if (restored) return
+    if (!munIdFromUrl) setRestored(true)
+  }, [munIdFromUrl, restored])
+
+  // ── Sync municipioGeojson when malha loads ────────────────────────────────────
+  useEffect(() => {
+    setMunicipioGeojson(municipioMalha ?? null)
+  }, [municipioMalha])
 
   // ── Sync state → URL ──────────────────────────────────────────────────────────
   useEffect(() => {
     const params = new URLSearchParams()
-    if (selectedEstado) {
-      params.set('estado', selectedEstado.sigla)
-      params.set('estadoId', String(selectedEstado.id))
-    }
     if (selectedMunicipio) {
       params.set('municipio', selectedMunicipio.nome)
       params.set('municipioId', String(selectedMunicipio.id))
+      params.set('estado', selectedMunicipio.estadoSigla)
+      params.set('estadoId', String(selectedMunicipio.estadoId))
     }
     if (latInput) params.set('lat', latInput)
     if (lngInput) params.set('lng', lngInput)
 
     const search = params.toString()
     router.replace(search ? `?${search}` : '/', { scroll: false })
-  }, [selectedEstado, selectedMunicipio, latInput, lngInput, router])
+  }, [selectedMunicipio, latInput, lngInput, router])
 
   // ── Handlers ──────────────────────────────────────────────────────────────────
-  const handleEstadoSelect = useCallback((estado: Estado) => {
-    setSelectedEstado(estado)
-    setSelectedMunicipio(null)
-    setMunicipioGeojson(null)
+  const handleMunicipioSelect = useCallback((mun: MunicipioWithEstado) => {
+    setSelectedMunicipio(mun)
     setCheckResult(null)
   }, [])
-
-  const handleMunicipioSelect = useCallback(
-    (mun: Municipio) => {
-      setSelectedMunicipio(mun)
-      setCheckResult(null)
-      if (!estadoGeojson) return
-      const filtered = extractMunicipioMalha(estadoGeojson as GeoJSON.FeatureCollection, mun.id)
-      setMunicipioGeojson(filtered.features.length ? filtered : null)
-    },
-    [estadoGeojson]
-  )
 
   const handleGeoResult = useCallback((r: GeoResult) => {
     setLatInput(String(r.lat))
     setLngInput(String(r.lng))
   }, [])
-
-  const handleMunicipioClickOnMap = useCallback((municipioId: number) => {
-    const mun = municipios.find((m) => m.id === municipioId)
-    if (mun) handleMunicipioSelect(mun)
-  }, [municipios, handleMunicipioSelect])
 
   const handleCoordPaste = useCallback((e: React.ClipboardEvent<HTMLInputElement>) => {
     const text = e.clipboardData.getData('text')
@@ -250,45 +209,38 @@ function PageInner() {
       setMarkerPos(null); setCheckResult(null); return
     }
     setMarkerPos([lat, lng])
-    const geojson = municipioGeojson ?? (estadoGeojson as GeoJSON.FeatureCollection | null)
-    if (!geojson || loadingMalha) { setCheckResult(null); return }
-    const inside = pointInGeojson(geojson, lat, lng)
-    const label = selectedMunicipio?.nome ?? selectedEstado?.nome ?? ''
+    if (!municipioGeojson || loadingMalha) { setCheckResult(null); return }
+    const inside = pointInGeojson(municipioGeojson, lat, lng)
+    const label = selectedMunicipio?.nome ?? ''
     setCheckResult({ inside, label })
-  }, [lat, lng, validCoord, municipioGeojson, estadoGeojson, loadingMalha, selectedMunicipio, selectedEstado])
+  }, [lat, lng, validCoord, municipioGeojson, loadingMalha, selectedMunicipio])
 
-  // ── Auto-detect estado + municipio from coordinates ───────────────────────────
+  // ── Auto-detect municipio from coordinates ────────────────────────────────────
   useEffect(() => {
-    if (!validCoord || lat === null || lng === null || !estados.length) return
+    if (!validCoord || lat === null || lng === null) return
     if (reverseGeocodeTimer.current) clearTimeout(reverseGeocodeTimer.current)
     reverseGeocodeTimer.current = setTimeout(async () => {
       setIsLocating(true)
       try {
         const result = await reverseGeocode(lat, lng)
-        if (!result) return
-        const estado = estados.find((e) => e.sigla === result.stateSigla)
-        if (!estado) return
-        setPendingMunicipioName(result.cityName)
-        if (selectedEstado?.sigla !== estado.sigla) handleEstadoSelect(estado)
+        if (result) setRevGeoQuery({ name: result.cityName, sigla: result.stateSigla })
       } finally {
         setIsLocating(false)
       }
     }, 900)
     return () => { if (reverseGeocodeTimer.current) clearTimeout(reverseGeocodeTimer.current) }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lat, lng, validCoord, estados])
+  }, [lat, lng, validCoord])
 
-  // ── Select municipio once the list loads after a reverse geocode ──────────────
+  // ── Select municipio once reverse geocode results arrive ──────────────────────
   useEffect(() => {
-    if (!pendingMunicipioName || !municipios.length) return
-    const normalize = (s: string) =>
-      s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
-    const mun = municipios.find((m) => normalize(m.nome) === normalize(pendingMunicipioName))
-    if (mun) {
-      setPendingMunicipioName(null)
-      handleMunicipioSelect(mun)
+    if (!revGeoQuery || !revGeoResults.length) return
+    const match = revGeoResults.find((m) => m.estadoSigla === revGeoQuery.sigla)
+    if (match) {
+      setRevGeoQuery(null)
+      handleMunicipioSelect(match)
     }
-  }, [municipios, pendingMunicipioName, handleMunicipioSelect])
+  }, [revGeoResults, revGeoQuery, handleMunicipioSelect])
 
   const { resolvedTheme } = useTheme()
 
@@ -307,39 +259,13 @@ function PageInner() {
           </SidebarHeader>
 
           <SidebarContent className="gap-0 overflow-y-auto">
-            {/* Localização */}
+            {/* Município */}
             <SidebarGroup>
               <SidebarGroupLabel>Localização</SidebarGroupLabel>
-              <SidebarGroupContent className="flex flex-col gap-3 px-2">
-                <div className="flex flex-col gap-1.5">
-                  <Label className="text-xs">Estado</Label>
-                  <ComboBox
-                    items={estados}
-                    value={selectedEstado}
-                    onSelect={handleEstadoSelect}
-                    loading={loadingEstados}
-                    placeholder="Buscar estado..."
-                    getKey={(e) => e.sigla}
-                    getLabel={(e) => `${e.nome} (${e.sigla})`}
-                    open={estadoOpen}
-                    onOpenChange={setEstadoOpen}
-                  />
-                </div>
+              <SidebarGroupContent className="flex flex-col gap-2 px-2">
                 <div className="flex flex-col gap-1.5">
                   <Label className="text-xs">Município</Label>
-                  <ComboBox
-                    items={municipios}
-                    value={selectedMunicipio}
-                    onSelect={handleMunicipioSelect}
-                    disabled={!selectedEstado}
-                    loading={loadingMunicipios}
-                    placeholder="Buscar município..."
-                    disabledPlaceholder="Selecione o estado primeiro"
-                    getKey={(m) => String(m.id)}
-                    getLabel={(m) => m.nome}
-                    open={municipioOpen}
-                    onOpenChange={setMunicipioOpen}
-                  />
+                  <CitySearch value={selectedMunicipio} onSelect={handleMunicipioSelect} />
                 </div>
                 {loadingMalha && (
                   <p className="text-xs text-muted-foreground flex items-center gap-1.5">
@@ -393,9 +319,9 @@ function PageInner() {
                     <Loader2 className="h-3 w-3 animate-spin" /> Identificando localização...
                   </p>
                 )}
-                {validCoord && !checkResult && !loadingMalha && !selectedEstado && !isLocating && (
+                {validCoord && !checkResult && !loadingMalha && !selectedMunicipio && !isLocating && (
                   <p className="text-xs text-muted-foreground">
-                    Ponto plotado. Selecione um estado para verificar.
+                    Ponto plotado. Selecione um município para verificar.
                   </p>
                 )}
                 {validCoord && loadingMalha && !isLocating && (
@@ -422,7 +348,7 @@ function PageInner() {
                 )}
 
                 {/* Share */}
-                {(selectedEstado || validCoord) && (
+                {(selectedMunicipio || validCoord) && (
                   <ShareButton />
                 )}
               </SidebarGroupContent>
@@ -439,13 +365,11 @@ function PageInner() {
         {/* Map */}
         <SidebarInset className="relative min-w-0 h-dvh overflow-hidden">
           <MapView
-            estadoGeojson={estadoGeojson as GeoJSON.FeatureCollection | null}
+            estadoGeojson={null}
             municipioGeojson={municipioGeojson}
-            estadoId={selectedEstado?.id}
             municipioId={selectedMunicipio?.id}
             marker={markerPos}
             theme={resolvedTheme}
-            onMunicipioClick={handleMunicipioClickOnMap}
           />
         </SidebarInset>
     </SidebarProvider>

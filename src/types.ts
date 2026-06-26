@@ -13,3 +13,11 @@ export interface Municipio {
   id: number
   nome: string
 }
+
+export interface MunicipioWithEstado {
+  id: number
+  nome: string
+  estadoId: number
+  estadoSigla: string
+  estadoNome: string
+}

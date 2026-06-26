@@ -4,7 +4,7 @@ import fs from 'fs'
 import path from 'path'
 import { router, publicProcedure } from '../trpc'
 import { prisma, dbAvailable } from '../db'
-import type { Estado, Municipio } from '@/types'
+import type { Estado, Municipio, MunicipioWithEstado } from '@/types'
 
 const STATIC = path.join(process.cwd(), 'public', 'data')
 
@@ -23,6 +23,33 @@ async function withFallback<T>(
   const file = staticJSON<T>(staticPath)
   if (file) return file
   throw new Error('Data not available. Run `npm run db:seed` or `npm run download`.')
+}
+
+// Module-level cache for static municipio search
+let _staticMunicipios: MunicipioWithEstado[] | null = null
+
+function getStaticMunicipios(): MunicipioWithEstado[] {
+  if (_staticMunicipios) return _staticMunicipios
+  const estados = staticJSON<Estado[]>(path.join(STATIC, 'estados.json')) ?? []
+  _staticMunicipios = []
+  for (const e of estados) {
+    const municipios =
+      staticJSON<Municipio[]>(path.join(STATIC, 'municipios', `${e.id}.json`)) ?? []
+    for (const m of municipios) {
+      _staticMunicipios.push({
+        id: m.id,
+        nome: m.nome,
+        estadoId: e.id,
+        estadoSigla: e.sigla.trim(),
+        estadoNome: e.nome,
+      })
+    }
+  }
+  return _staticMunicipios
+}
+
+function normalizeStr(s: string) {
+  return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
 }
 
 export const ibgeRouter = router({
@@ -46,6 +73,75 @@ export const ibgeRouter = router({
     )
   ),
 
+  searchMunicipios: publicProcedure
+    .input(z.object({ query: z.string(), limit: z.number().int().min(1).max(30).default(12) }))
+    .query(async ({ input }) => {
+      const q = input.query.trim()
+      if (!q) return [] as MunicipioWithEstado[]
+
+      if (await dbAvailable()) {
+        const rows = await prisma.municipio.findMany({
+          where: { nome: { contains: q, mode: 'insensitive' } },
+          include: { estado: { select: { sigla: true, nome: true } } },
+          orderBy: { nome: 'asc' },
+          take: input.limit,
+        })
+        return rows.map((r) => ({
+          id: r.id,
+          nome: r.nome,
+          estadoId: r.estadoId,
+          estadoSigla: r.estado.sigla.trim(),
+          estadoNome: r.estado.nome,
+        })) satisfies MunicipioWithEstado[]
+      }
+
+      const normalized = normalizeStr(q)
+      return getStaticMunicipios()
+        .filter((m) => normalizeStr(m.nome).includes(normalized))
+        .slice(0, input.limit)
+    }),
+
+  getMunicipio: publicProcedure
+    .input(z.object({ id: z.number() }))
+    .query(async ({ input }): Promise<MunicipioWithEstado | null> => {
+      if (await dbAvailable()) {
+        const row = await prisma.municipio.findUnique({
+          where: { id: input.id },
+          include: { estado: { select: { sigla: true, nome: true } } },
+        })
+        if (!row) return null
+        return {
+          id: row.id,
+          nome: row.nome,
+          estadoId: row.estadoId,
+          estadoSigla: row.estado.sigla.trim(),
+          estadoNome: row.estado.nome,
+        }
+      }
+      return getStaticMunicipios().find((m) => m.id === input.id) ?? null
+    }),
+
+  malhaMunicipio: publicProcedure
+    .input(z.object({ municipioId: z.number(), estadoId: z.number() }))
+    .query(async ({ input }): Promise<GeoJSON.FeatureCollection | null> => {
+      const estadoGeoJson = await withFallback<GeoJSON.FeatureCollection>(
+        async () => {
+          const row = await prisma.malhaEstado.findUnique({
+            where: { estadoId: input.estadoId },
+            select: { geojson: true },
+          })
+          return row ? (row.geojson as unknown as GeoJSON.FeatureCollection) : null
+        },
+        path.join(STATIC, 'malhas', `${input.estadoId}.geojson`)
+      )
+      const feature = estadoGeoJson.features.find(
+        (f) => f.properties?.codarea === String(input.municipioId)
+      )
+      if (!feature) return null
+      return { type: 'FeatureCollection', features: [feature] }
+    }),
+
+  // Kept for backward compat / status endpoint
   municipios: publicProcedure
     .input(z.object({ estadoId: z.number() }))
     .query(({ input }) =>

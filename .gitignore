@@ -26,3 +26,4 @@ public/data/
 *.sw?
 
 /src/generated/prisma
+.next
