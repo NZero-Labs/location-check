@@ -16,7 +16,7 @@ import { ComboBox } from '@/components/ComboBox'
 import {
   Sidebar, SidebarContent, SidebarFooter,
   SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
-  SidebarHeader, SidebarProvider,
+  SidebarHeader, SidebarInset, SidebarProvider,
 } from '@/components/ui/sidebar'
 import { Card, CardContent } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
@@ -378,7 +378,7 @@ function PageInner() {
         </Sidebar>
 
         {/* Map */}
-        <main className="flex-1 relative min-w-0 h-dvh">
+        <SidebarInset className="relative min-w-0 h-dvh overflow-hidden">
           <MapView
             estadoGeojson={estadoGeojson as GeoJSON.FeatureCollection | null}
             municipioGeojson={municipioGeojson}
@@ -387,7 +387,7 @@ function PageInner() {
             marker={markerPos}
             theme={resolvedTheme}
           />
-        </main>
+        </SidebarInset>
     </SidebarProvider>
   )
 }
