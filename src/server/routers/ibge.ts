@@ -73,6 +73,32 @@ export const ibgeRouter = router({
     )
   ),
 
+  searchEstados: publicProcedure
+    .input(z.object({ query: z.string() }))
+    .query(async ({ input }): Promise<Estado[]> => {
+      const q = input.query.trim()
+      if (!q) return []
+      if (await dbAvailable()) {
+        const rows = await prisma.estado.findMany({
+          where: { OR: [
+            { nome: { contains: q, mode: 'insensitive' } },
+            { sigla: { contains: q, mode: 'insensitive' } },
+          ]},
+          orderBy: { nome: 'asc' },
+          take: 5,
+        })
+        return rows.map((r) => ({
+          id: r.id, sigla: r.sigla.trim(), nome: r.nome,
+          regiao: { id: r.regiaoId ?? 0, sigla: (r.regiaoSigla ?? '').trim(), nome: r.regiaoNome ?? '' },
+        }))
+      }
+      const all = staticJSON<Estado[]>(path.join(STATIC, 'estados.json')) ?? []
+      const normalized = normalizeStr(q)
+      return all
+        .filter((e) => normalizeStr(e.nome).includes(normalized) || normalizeStr(e.sigla).includes(normalized))
+        .slice(0, 5)
+    }),
+
   searchMunicipios: publicProcedure
     .input(z.object({ query: z.string(), limit: z.number().int().min(1).max(30).default(12) }))
     .query(async ({ input }) => {

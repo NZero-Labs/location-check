@@ -1,20 +1,38 @@
 'use client'
 import { useCallback, useRef, useState } from 'react'
 import { trpc } from '@/lib/trpc'
-import type { MunicipioWithEstado } from '@/types'
+import type { CitySearchValue, MunicipioWithEstado } from '@/types'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Button } from '@/components/ui/button'
 import {
   Command, CommandEmpty, CommandGroup,
-  CommandInput, CommandItem, CommandList,
+  CommandInput, CommandItem, CommandList, CommandSeparator,
 } from '@/components/ui/command'
 import { Badge } from '@/components/ui/badge'
-import { Check, ChevronsUpDown, Loader2 } from 'lucide-react'
+import { Check, ChevronsUpDown, Loader2, Map } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface CitySearchProps {
-  value: MunicipioWithEstado | null
-  onSelect: (m: MunicipioWithEstado) => void
+  value: CitySearchValue | null
+  onSelect: (v: CitySearchValue) => void
+}
+
+function triggerLabel(value: CitySearchValue | null): React.ReactNode {
+  if (!value) return <span className="text-muted-foreground">Buscar estado ou município...</span>
+  if (value.kind === 'estado') {
+    return (
+      <span>
+        {value.data.nome}{' '}
+        <span className="text-muted-foreground">({value.data.sigla}) — Estado</span>
+      </span>
+    )
+  }
+  return (
+    <span>
+      {value.data.nome}{' '}
+      <span className="text-muted-foreground">({value.data.estadoSigla})</span>
+    </span>
+  )
 }
 
 export function CitySearch({ value, onSelect }: CitySearchProps) {
@@ -29,10 +47,40 @@ export function CitySearch({ value, onSelect }: CitySearchProps) {
     debounceRef.current = setTimeout(() => setDebouncedQuery(val), 300)
   }, [])
 
-  const { data: results = [], isFetching } = trpc.ibge.searchMunicipios.useQuery(
-    { query: debouncedQuery, limit: 12 },
-    { enabled: debouncedQuery.trim().length >= 2 }
+  const trimmed = debouncedQuery.trim()
+
+  const { data: estadoResults = [], isFetching: fetchingEstados } =
+    trpc.ibge.searchEstados.useQuery(
+      { query: trimmed },
+      { enabled: trimmed.length >= 1 }
+    )
+
+  const { data: municipioResults = [], isFetching: fetchingMunicipios } =
+    trpc.ibge.searchMunicipios.useQuery(
+      { query: trimmed, limit: 20 },
+      { enabled: trimmed.length >= 2 }
+    )
+
+  const isFetching = fetchingEstados || fetchingMunicipios
+
+  // Group municipios by state
+  const grouped = municipioResults.reduce<Map<string, { estadoNome: string; items: MunicipioWithEstado[] }>>(
+    (acc, m) => {
+      if (!acc.has(m.estadoSigla)) acc.set(m.estadoSigla, { estadoNome: m.estadoNome, items: [] })
+      acc.get(m.estadoSigla)!.items.push(m)
+      return acc
+    },
+    new Map()
   )
+
+  const hasResults = estadoResults.length > 0 || municipioResults.length > 0
+
+  const close = () => { setOpen(false); setQuery(''); setDebouncedQuery('') }
+
+  const selectedKey =
+    value?.kind === 'estado' ? `estado-${value.data.id}`
+    : value?.kind === 'municipio' ? `municipio-${value.data.id}`
+    : null
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -43,19 +91,15 @@ export function CitySearch({ value, onSelect }: CitySearchProps) {
           aria-expanded={open}
           className="w-full justify-between font-normal"
         >
-          <span className="truncate">
-            {value
-              ? <span>{value.nome} <span className="text-muted-foreground">({value.estadoSigla})</span></span>
-              : <span className="text-muted-foreground">Buscar município...</span>}
-          </span>
+          <span className="truncate">{triggerLabel(value)}</span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
 
-      <PopoverContent className="w-80 p-0" align="start">
+      <PopoverContent className="w-88 p-0" align="start">
         <Command shouldFilter={false}>
           <CommandInput
-            placeholder="Digite o nome do município..."
+            placeholder="Estado ou município..."
             value={query}
             onValueChange={handleInput}
           />
@@ -65,39 +109,63 @@ export function CitySearch({ value, onSelect }: CitySearchProps) {
                 <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
               </div>
             )}
-            {!isFetching && debouncedQuery.trim().length < 2 && (
+
+            {!isFetching && trimmed.length < 1 && (
               <div className="py-4 text-center text-xs text-muted-foreground">
-                Digite ao menos 2 caracteres
+                Digite para buscar um estado ou município
               </div>
             )}
-            {!isFetching && debouncedQuery.trim().length >= 2 && results.length === 0 && (
-              <CommandEmpty>Nenhum município encontrado.</CommandEmpty>
+
+            {!isFetching && trimmed.length >= 1 && !hasResults && (
+              <CommandEmpty>Nenhum resultado encontrado.</CommandEmpty>
             )}
-            {!isFetching && results.length > 0 && (
-              <CommandGroup>
-                {results.map((m) => (
-                  <CommandItem
-                    key={m.id}
-                    value={String(m.id)}
-                    onSelect={() => {
-                      onSelect(m)
-                      setOpen(false)
-                      setQuery('')
-                      setDebouncedQuery('')
-                    }}
-                  >
-                    <Check
-                      className={cn('mr-2 h-4 w-4 shrink-0',
-                        value?.id === m.id ? 'opacity-100' : 'opacity-0')}
-                    />
-                    <span className="flex-1 truncate">{m.nome}</span>
-                    <Badge variant="outline" className="ml-2 shrink-0 text-xs font-normal">
-                      {m.estadoSigla}
-                    </Badge>
-                  </CommandItem>
-                ))}
+
+            {/* ── Estados ── */}
+            {!isFetching && estadoResults.length > 0 && (
+              <>
+                <CommandGroup heading="Estados">
+                  {estadoResults.map((e) => {
+                    const key = `estado-${e.id}`
+                    return (
+                      <CommandItem
+                        key={key}
+                        value={key}
+                        onSelect={() => { onSelect({ kind: 'estado', data: e }); close() }}
+                        className="gap-2"
+                      >
+                        <Check className={cn('h-4 w-4 shrink-0', selectedKey === key ? 'opacity-100' : 'opacity-0')} />
+                        <Map className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        <span className="flex-1 truncate">{e.nome}</span>
+                        <Badge variant="secondary" className="shrink-0 text-xs">{e.sigla}</Badge>
+                      </CommandItem>
+                    )
+                  })}
+                </CommandGroup>
+                {municipioResults.length > 0 && <CommandSeparator />}
+              </>
+            )}
+
+            {/* ── Municípios grouped by state ── */}
+            {!isFetching && Array.from(grouped.entries()).map(([sigla, group], idx) => (
+              <CommandGroup
+                key={sigla}
+                heading={`${group.estadoNome} (${sigla})`}
+              >
+                {group.items.map((m) => {
+                  const key = `municipio-${m.id}`
+                  return (
+                    <CommandItem
+                      key={key}
+                      value={key}
+                      onSelect={() => { onSelect({ kind: 'municipio', data: m }); close() }}
+                    >
+                      <Check className={cn('mr-2 h-4 w-4 shrink-0', selectedKey === key ? 'opacity-100' : 'opacity-0')} />
+                      <span className="flex-1 truncate">{m.nome}</span>
+                    </CommandItem>
+                  )
+                })}
               </CommandGroup>
-            )}
+            ))}
           </CommandList>
         </Command>
       </PopoverContent>

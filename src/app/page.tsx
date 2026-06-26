@@ -6,7 +6,7 @@ import * as turf from '@turf/turf'
 import type { Feature, Polygon, MultiPolygon } from 'geojson'
 
 import { trpc } from '@/lib/trpc'
-import type { MunicipioWithEstado } from '@/types'
+import type { CitySearchValue, Estado, MunicipioWithEstado } from '@/types'
 import type { GeoResult } from '@/lib/geocoding'
 import { reverseGeocode } from '@/lib/geocoding'
 
@@ -112,6 +112,7 @@ function PageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
+  const [selectedEstado, setSelectedEstado] = useState<Estado | null>(null)
   const [selectedMunicipio, setSelectedMunicipio] = useState<MunicipioWithEstado | null>(null)
   const [municipioGeojson, setMunicipioGeojson] = useState<GeoJSON.FeatureCollection | null>(null)
   const [latInput, setLatInput] = useState(searchParams.get('lat') ?? '')
@@ -134,11 +135,21 @@ function PageInner() {
   )
 
   // Malha for selected municipio (server extracts only the one feature)
-  const { data: municipioMalha = null, isLoading: loadingMalha } =
+  const { data: municipioMalha = null, isLoading: loadingMalhaMunicipio } =
     trpc.ibge.malhaMunicipio.useQuery(
       { municipioId: selectedMunicipio?.id ?? 0, estadoId: selectedMunicipio?.estadoId ?? 0 },
       { enabled: !!selectedMunicipio }
     )
+
+  // Malha for selected estado
+  const { data: estadoMalha = null, isLoading: loadingMalhaEstado } =
+    trpc.ibge.malhaEstado.useQuery(
+      { estadoId: selectedEstado?.id ?? 0 },
+      { enabled: !!selectedEstado && !selectedMunicipio }
+    )
+
+  const loadingMalha = loadingMalhaMunicipio || loadingMalhaEstado
+  const activeMalha = municipioMalha ?? estadoMalha ?? null
 
   // Reverse geocode city search
   const { data: revGeoResults = [] } = trpc.ibge.searchMunicipios.useQuery(
@@ -166,8 +177,9 @@ function PageInner() {
 
   // ── Sync municipioGeojson when malha loads ────────────────────────────────────
   useEffect(() => {
-    setMunicipioGeojson(municipioMalha ?? null)
-  }, [municipioMalha])
+    setMunicipioGeojson(activeMalha)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [municipioMalha, estadoMalha])
 
   // ── Sync state → URL ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -177,13 +189,16 @@ function PageInner() {
       params.set('municipioId', String(selectedMunicipio.id))
       params.set('estado', selectedMunicipio.estadoSigla)
       params.set('estadoId', String(selectedMunicipio.estadoId))
+    } else if (selectedEstado) {
+      params.set('estado', selectedEstado.sigla)
+      params.set('estadoId', String(selectedEstado.id))
     }
     if (latInput) params.set('lat', latInput)
     if (lngInput) params.set('lng', lngInput)
 
     const search = params.toString()
     router.replace(search ? `?${search}` : '/', { scroll: false })
-  }, [selectedMunicipio, latInput, lngInput, router])
+  }, [selectedEstado, selectedMunicipio, latInput, lngInput, router])
 
   // ── Handlers ──────────────────────────────────────────────────────────────────
   const handleMunicipioSelect = useCallback((mun: MunicipioWithEstado) => {
@@ -406,6 +421,33 @@ function PageInner() {
             marker={markerPos}
             theme={resolvedTheme}
           />
+
+          {/* Map legend */}
+          {(municipioGeojson || detectedMalha) && (
+            <div className="absolute bottom-6 right-3 z-1200 flex flex-col gap-1.5 rounded-lg border border-border bg-background/90 backdrop-blur-sm px-3 py-2 shadow-md text-xs">
+              {municipioGeojson && selectedMunicipio && (
+                <div className="flex items-center gap-2">
+                  <span className="h-3 w-5 shrink-0 rounded-sm border-2 border-emerald-500 bg-emerald-200/60" />
+                  <span className="font-medium truncate max-w-40">
+                    {selectedMunicipio.nome}
+                    <span className="text-muted-foreground font-normal"> ({selectedMunicipio.estadoSigla})</span>
+                  </span>
+                </div>
+              )}
+              {detectedMalha && detectedMunicipio && (
+                <div className="flex items-center gap-2">
+                  <span
+                    className="h-3 w-5 shrink-0 rounded-sm border-2 border-indigo-500 bg-indigo-200/60"
+                    style={{ backgroundImage: 'repeating-linear-gradient(90deg, transparent, transparent 3px, rgba(99,102,241,0.3) 3px, rgba(99,102,241,0.3) 6px)' }}
+                  />
+                  <span className="truncate max-w-40">
+                    {detectedMunicipio.nome}
+                    <span className="text-muted-foreground"> ({detectedMunicipio.estadoSigla})</span>
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
         </SidebarInset>
     </SidebarProvider>
   )

@@ -9,13 +9,6 @@ export const metadata: Metadata = {
   applicationName: 'Malhas IBGE',
   authors: [{ name: 'Amara NetZero' }],
   keywords: ['IBGE', 'malhas geográficas', 'municípios', 'coordenadas', 'Amara NetZero'],
-  icons: {
-    icon: [
-      { url: '/favicon.svg', type: 'image/svg+xml' },
-      { url: '/favicon.ico', type: 'image/x-icon' },
-    ],
-    shortcut: '/favicon.ico',
-  },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -21,3 +21,7 @@ export interface MunicipioWithEstado {
   estadoSigla: string
   estadoNome: string
 }
+
+export type CitySearchValue =
+  | { kind: 'estado'; data: Estado }
+  | { kind: 'municipio'; data: MunicipioWithEstado }
