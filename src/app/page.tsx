@@ -380,7 +380,7 @@ function PageInner() {
                     <Loader2 className="h-3 w-3 animate-spin" /> Identificando localização...
                   </p>
                 )}
-                {validCoord && !checkResult && !loadingMalha && !selectedMunicipio && !selectedEstado && !isLocating && (
+                {validCoord && !checkResult && !loadingMalha && !selectedMunicipio && !selectedEstado && !isLocating && !detectedMunicipio && (
                   <p className="text-xs text-muted-foreground">
                     Ponto plotado. Selecione um estado ou município para verificar.
                   </p>
@@ -408,8 +408,8 @@ function PageInner() {
                   </div>
                 )}
 
-                {/* Detected municipio differs from selected */}
-                {detectedMunicipio && selectedMunicipio && detectedMunicipio.id !== selectedMunicipio.id && (
+                {/* Detected municipio — shows whenever it differs from selection */}
+                {detectedMunicipio && detectedMunicipio.id !== selectedMunicipio?.id && (
                   <div className="flex flex-col gap-2 rounded-md border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-950/40 p-3">
                     <p className="text-xs text-indigo-600 dark:text-indigo-400 font-medium">Ponto localizado em:</p>
                     <div className="flex items-center justify-between gap-2">
@@ -423,6 +423,9 @@ function PageInner() {
                         Usar
                       </Button>
                     </div>
+                    <p className="text-xs text-muted-foreground">
+                      {detectedMunicipio.estadoNome}
+                    </p>
                   </div>
                 )}
 
