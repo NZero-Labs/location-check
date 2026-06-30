@@ -10,9 +10,9 @@ export const metadata: Metadata = {
   authors: [{ name: 'Amara NetZero' }],
   keywords: ['IBGE', 'malhas geográficas', 'municípios', 'coordenadas', 'Amara NetZero'],
   icons: {
-    icon: "/favicon.ico", // Paths point to public/ folder
+    icon: "/favicon.ico",
     apple: "/favicon.ico",
-    
+
   },
 }
 
