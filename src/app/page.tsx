@@ -465,6 +465,13 @@ function PageInner() {
             theme={resolvedTheme}
           />
 
+          {loadingMalha && (
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[1200] flex items-center gap-2 rounded-full border border-border bg-background/90 backdrop-blur-sm px-4 py-1.5 shadow-md text-xs font-medium pointer-events-none">
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+              Carregando malha...
+            </div>
+          )}
+
           {/* Map legend */}
           {(municipioGeojson || detectedMalha) && (
             <div className="absolute bottom-6 right-3 z-1200 flex flex-col gap-1.5 rounded-lg border border-border bg-background/90 backdrop-blur-sm px-3 py-2 shadow-md text-xs">
