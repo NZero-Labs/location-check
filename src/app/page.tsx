@@ -195,6 +195,7 @@ function PageInner() {
 
   // ── Sync state → URL ──────────────────────────────────────────────────────────
   useEffect(() => {
+    if (!restored) return
     const params = new URLSearchParams()
     if (selectedMunicipio) {
       params.set('municipio', String(selectedMunicipio.id))
@@ -206,7 +207,7 @@ function PageInner() {
 
     const search = params.toString()
     router.replace(search ? `?${search}` : '/', { scroll: false })
-  }, [selectedEstado, selectedMunicipio, latInput, lngInput, router])
+  }, [restored, selectedEstado, selectedMunicipio, latInput, lngInput, router])
 
   // ── Handlers ──────────────────────────────────────────────────────────────────
   const handleCitySearchSelect = useCallback((v: CitySearchValue) => {
