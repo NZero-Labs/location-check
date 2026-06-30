@@ -127,6 +127,36 @@ export const ibgeRouter = router({
         .slice(0, input.limit)
     }),
 
+  getEstado: publicProcedure
+    .input(z.object({ id: z.number() }))
+    .query(async ({ input }): Promise<Estado | null> => {
+      if (await dbAvailable()) {
+        const row = await prisma.estado.findUnique({ where: { id: input.id } })
+        if (!row) return null
+        return {
+          id: row.id, sigla: row.sigla.trim(), nome: row.nome,
+          regiao: { id: row.regiaoId ?? 0, sigla: (row.regiaoSigla ?? '').trim(), nome: row.regiaoNome ?? '' },
+        }
+      }
+      const all = staticJSON<Estado[]>(path.join(STATIC, 'estados.json')) ?? []
+      return all.find((e) => e.id === input.id) ?? null
+    }),
+
+  getEstado: publicProcedure
+    .input(z.object({ id: z.number() }))
+    .query(async ({ input }): Promise<Estado | null> => {
+      if (await dbAvailable()) {
+        const row = await prisma.estado.findUnique({ where: { id: input.id } })
+        if (!row) return null
+        return {
+          id: row.id, sigla: row.sigla.trim(), nome: row.nome,
+          regiao: { id: row.regiaoId ?? 0, sigla: (row.regiaoSigla ?? '').trim(), nome: row.regiaoNome ?? '' },
+        }
+      }
+      const all = staticJSON<Estado[]>(path.join(STATIC, 'estados.json')) ?? []
+      return all.find((e) => e.id === input.id) ?? null
+    }),
+
   getMunicipio: publicProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ input }): Promise<MunicipioWithEstado | null> => {

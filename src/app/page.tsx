@@ -127,11 +127,17 @@ function PageInner() {
 
   // ── tRPC queries ─────────────────────────────────────────────────────────────
 
-  // Restore from URL: fetch municipio by ID
-  const munIdFromUrl = restored ? null : Number(searchParams.get('municipioId')) || null
+  // Restore from URL: read IBGE codes directly from params
+  const munIdFromUrl  = restored ? null : Number(searchParams.get('municipio'))  || null
+  const estIdFromUrl  = restored ? null : Number(searchParams.get('estado'))      || null
+
   const { data: restoredMun } = trpc.ibge.getMunicipio.useQuery(
     { id: munIdFromUrl ?? 0 },
     { enabled: !!munIdFromUrl && !restored }
+  )
+  const { data: restoredEst } = trpc.ibge.getEstado.useQuery(
+    { id: estIdFromUrl ?? 0 },
+    { enabled: !!estIdFromUrl && !munIdFromUrl && !restored }
   )
 
   // Malha for selected municipio (server extracts only the one feature)
@@ -171,9 +177,15 @@ function PageInner() {
   }, [restoredMun, restored])
 
   useEffect(() => {
+    if (restored || !restoredEst || munIdFromUrl) return
+    setSelectedEstado(restoredEst)
+    setRestored(true)
+  }, [restoredEst, restored, munIdFromUrl])
+
+  useEffect(() => {
     if (restored) return
-    if (!munIdFromUrl) setRestored(true)
-  }, [munIdFromUrl, restored])
+    if (!munIdFromUrl && !estIdFromUrl) setRestored(true)
+  }, [munIdFromUrl, estIdFromUrl, restored])
 
   // ── Sync municipioGeojson when malha loads ────────────────────────────────────
   useEffect(() => {
@@ -185,13 +197,9 @@ function PageInner() {
   useEffect(() => {
     const params = new URLSearchParams()
     if (selectedMunicipio) {
-      params.set('municipio', selectedMunicipio.nome)
-      params.set('municipioId', String(selectedMunicipio.id))
-      params.set('estado', selectedMunicipio.estadoSigla)
-      params.set('estadoId', String(selectedMunicipio.estadoId))
+      params.set('municipio', String(selectedMunicipio.id))
     } else if (selectedEstado) {
-      params.set('estado', selectedEstado.sigla)
-      params.set('estadoId', String(selectedEstado.id))
+      params.set('estado', String(selectedEstado.id))
     }
     if (latInput) params.set('lat', latInput)
     if (lngInput) params.set('lng', lngInput)
