@@ -8,7 +8,7 @@ export const metadata: Metadata = {
     'Aplicação da Amara NetZero para visualização de malhas geográficas e verificação de coordenadas nos municípios brasileiros.',
   applicationName: 'Malhas IBGE',
   authors: [{ name: 'Amara NetZero' }],
-  keywords: ['IBGE', 'malhas geográficas', 'municípios', 'coordenadas', 'Amara NetZero'],
+  keywords: ['IBGE', 'malhas geográficas', 'municípios', 'coordenadas', 'Amara NetZero']
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
