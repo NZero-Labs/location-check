@@ -218,7 +218,6 @@ function PageInner() {
       setSelectedEstado(null)
       setSelectedMunicipio(v.data)
     }
-    setDetectedMunicipio(null)
     setCheckResult(null)
   }, [])
 
