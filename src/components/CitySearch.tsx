@@ -48,20 +48,27 @@ export function CitySearch({ value, onSelect }: CitySearchProps) {
   }, [])
 
   const trimmed = debouncedQuery.trim()
+  const isIbgeCode = /^\d+$/.test(trimmed) && trimmed.length >= 2
 
   const { data: estadoResults = [], isFetching: fetchingEstados } =
     trpc.ibge.searchEstados.useQuery(
       { query: trimmed },
-      { enabled: trimmed.length >= 1 }
+      { enabled: trimmed.length >= 1 && !isIbgeCode }
     )
 
   const { data: municipioResults = [], isFetching: fetchingMunicipios } =
     trpc.ibge.searchMunicipios.useQuery(
       { query: trimmed, limit: 20 },
-      { enabled: trimmed.length >= 2 }
+      { enabled: trimmed.length >= 2 && !isIbgeCode }
     )
 
-  const isFetching = fetchingEstados || fetchingMunicipios
+  const { data: ibgeCodeResult, isFetching: fetchingIbgeCode } =
+    trpc.ibge.getMunicipio.useQuery(
+      { id: Number(trimmed) },
+      { enabled: isIbgeCode }
+    )
+
+  const isFetching = fetchingEstados || fetchingMunicipios || fetchingIbgeCode
 
   // Group municipios by state
   type GroupMap = Map<string, { estadoNome: string; items: MunicipioWithEstado[] }>
@@ -71,7 +78,7 @@ export function CitySearch({ value, onSelect }: CitySearchProps) {
     grouped.get(m.estadoSigla)!.items.push(m)
   }
 
-  const hasResults = estadoResults.length > 0 || municipioResults.length > 0
+  const hasResults = estadoResults.length > 0 || municipioResults.length > 0 || !!ibgeCodeResult
 
   const close = () => { setOpen(false); setQuery(''); setDebouncedQuery('') }
 
@@ -116,6 +123,32 @@ export function CitySearch({ value, onSelect }: CitySearchProps) {
 
             {!isFetching && trimmed.length >= 1 && !hasResults && (
               <CommandEmpty>Nenhum resultado encontrado.</CommandEmpty>
+            )}
+
+            {/* ── IBGE code result ── */}
+            {!isFetching && isIbgeCode && ibgeCodeResult && (
+              <CommandGroup heading="Código IBGE">
+                {(() => {
+                  const m = ibgeCodeResult
+                  const key = `municipio-${m.id}`
+                  return (
+                    <CommandItem
+                      key={key}
+                      value={key}
+                      onSelect={() => { onSelect({ kind: 'municipio', data: m }); close() }}
+                    >
+                      <Check className={cn('mr-2 h-4 w-4 shrink-0', selectedKey === key ? 'opacity-100' : 'opacity-0')} />
+                      <span className="flex-1 truncate">{m.nome}</span>
+                      <Badge variant="secondary" className="shrink-0 text-xs">{m.estadoSigla}</Badge>
+                      <Badge variant="outline" className="shrink-0 text-xs font-mono">{m.id}</Badge>
+                    </CommandItem>
+                  )
+                })()}
+              </CommandGroup>
+            )}
+
+            {!isFetching && isIbgeCode && !ibgeCodeResult && trimmed.length >= 7 && (
+              <CommandEmpty>Nenhum município com esse código IBGE.</CommandEmpty>
             )}
 
             {/* ── Estados ── */}

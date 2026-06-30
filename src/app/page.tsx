@@ -226,6 +226,16 @@ function PageInner() {
     setLngInput(String(r.lng))
   }, [])
 
+  const handleCoordPaste = useCallback((e: React.ClipboardEvent<HTMLInputElement>) => {
+    const text = e.clipboardData.getData('text').trim()
+    const match = text.match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/)
+    if (match) {
+      e.preventDefault()
+      setLatInput(match[1])
+      setLngInput(match[2])
+    }
+  }, [])
+
 
   // ── Reactive coord → marker + check ──────────────────────────────────────────
   const lat = useMemo(() => { const v = parseFloat(latInput); return isNaN(v) ? null : v }, [latInput])
@@ -301,6 +311,9 @@ function PageInner() {
               <SidebarGroupContent className="flex flex-col gap-2 px-2">
                 <div className="flex flex-col gap-1.5">
                   <Label className="text-xs">Estado ou município</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Busque por nome ou cole o <span className="font-medium text-foreground">código IBGE</span> do município.
+                  </p>
                   <CitySearch
                     value={
                       selectedMunicipio
@@ -336,6 +349,9 @@ function PageInner() {
             <SidebarGroup>
               <SidebarGroupLabel>Coordenada</SidebarGroupLabel>
               <SidebarGroupContent className="flex flex-col gap-3 px-2">
+                <p className="text-xs text-muted-foreground">
+                  Cole <span className="font-medium text-foreground">lat, lng</span> em qualquer campo para preencher os dois automaticamente.
+                </p>
                 <div className="flex gap-2">
                   <div className="flex flex-col gap-1.5 flex-1">
                     <Label htmlFor="lat" className="text-xs">Latitude</Label>
@@ -344,6 +360,7 @@ function PageInner() {
                       placeholder="-23.5505"
                       value={latInput}
                       onChange={(e) => setLatInput(e.target.value)}
+                      onPaste={handleCoordPaste}
                     />
                   </div>
                   <div className="flex flex-col gap-1.5 flex-1">
@@ -353,6 +370,7 @@ function PageInner() {
                       placeholder="-46.6333"
                       value={lngInput}
                       onChange={(e) => setLngInput(e.target.value)}
+                      onPaste={handleCoordPaste}
                     />
                   </div>
                 </div>
